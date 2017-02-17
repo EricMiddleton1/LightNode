@@ -4,7 +4,8 @@ using namespace std;
 
 Communicator::Communicator(NodeType _nodeType,
 	uint16_t _pixelCount, function<void(vector<Color>&)> _cbUpdate)
-	:	udpSocket(ioService)
+	:	ioWork(new boost::asio::io_service::work(ioService))
+	,	udpSocket(ioService)
 	,	clientEndpoint(boost::asio::ip::udp::v4(), PORT_SEND)
 	,	recvEndpoint(boost::asio::ip::udp::v4(), PORT_RECV)
 	,	aliveTimer(ioService)
@@ -24,7 +25,8 @@ Communicator::Communicator(NodeType _nodeType,
 }
 
 Communicator::~Communicator() {
-	runThread = false;
+	ioWork.reset();
+	ioService.stop();
 
 	asyncThread.join();
 }
@@ -116,12 +118,7 @@ void Communicator::handleReceive(const boost::system::error_code& error,
 }
 
 void Communicator::threadRoutine() {
-	while(runThread) {
-		this_thread::sleep_for(chrono::milliseconds(10));
-		
 		ioService.run();
-		ioService.reset();
-	}
 }
 
 void Communicator::cbAliveTimer(const boost::system::error_code& ec) {

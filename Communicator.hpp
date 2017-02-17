@@ -63,6 +63,7 @@ class Communicator
 
 		//Network stuff
 		boost::asio::io_service ioService;
+		std::unique_ptr<boost::asio::io_service::work> ioWork;
 		boost::asio::ip::udp::socket udpSocket;
 		boost::asio::ip::udp::endpoint clientEndpoint, recvEndpoint;
 		uint16_t sendPort, recvPort;
@@ -73,7 +74,6 @@ class Communicator
 		std::thread asyncThread;
 
 		bool connected;
-		bool runThread = true;
 		uint16_t pixelCount;
 		NodeType nodeType;
 		boost::array<unsigned char, BUFFER_SIZE> readBuf;

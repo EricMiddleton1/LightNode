@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <mutex>
 
 #include "Color.hpp"
 
@@ -16,4 +17,5 @@ public:
 	virtual void update() = 0;
 protected:
 	std::vector<Color> leds;
+	mutable std::mutex ledMutex;
 };
