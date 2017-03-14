@@ -9,13 +9,23 @@
 class LightStrip
 {
 public:
-	LightStrip(size_t ledCount);
+	enum class Type {
+		Analog = 0,
+		Digital,
+		Matrix
+	};
 
+	LightStrip(Type type, size_t ledCount);
+
+	Type getType() const;
 	size_t getSize() const;
-	void setColors(const std::vector<Color>& colors);
+	
+	void setPixels(const std::vector<Color>& colors);
 
-	virtual void update() = 0;
 protected:
+	virtual void update() = 0;
+
+	Type type;
 	std::vector<Color> leds;
 	mutable std::mutex ledMutex;
 };

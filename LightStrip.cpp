@@ -5,8 +5,13 @@
 
 using namespace std;
 
-LightStrip::LightStrip(size_t _ledCount)
-	:	leds(_ledCount) {
+LightStrip::LightStrip(LightStrip::Type _type, size_t _ledCount)
+	:	type(_type)
+	,	leds(_ledCount) {
+}
+
+LightStrip::Type LightStrip::getType() const {
+	return type;
 }
 
 size_t LightStrip::getSize() const {
@@ -15,7 +20,7 @@ size_t LightStrip::getSize() const {
 	return leds.size();
 }
 
-void LightStrip::setColors(const vector<Color>& _colors) {
+void LightStrip::setPixels(const vector<Color>& _colors) {
 	unique_lock<mutex> ledLock(ledMutex);
 
 	if(_colors.size() != leds.size()) {
@@ -25,4 +30,6 @@ void LightStrip::setColors(const vector<Color>& _colors) {
 	}
 
 	leds = _colors;
+
+	update();
 }
