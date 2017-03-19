@@ -5,6 +5,11 @@
 
 using namespace std;
 
+LightStrip::LightStrip()
+	:	type(LightStrip::Type::Analog)
+	,	leds(0) {
+}
+
 LightStrip::LightStrip(LightStrip::Type _type, size_t _ledCount)
 	:	type(_type)
 	,	leds(_ledCount) {

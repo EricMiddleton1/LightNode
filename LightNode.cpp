@@ -1,4 +1,5 @@
 #include "LightNode.hpp"
+#include "LightStripMatrix.hpp"
 
 
 LightNode::LightNode(const std::vector<std::shared_ptr<LightStrip>>& _strips,
@@ -257,8 +258,10 @@ void LightNode::sendInfo(const boost::asio::ip::udp::endpoint& endpoint) {
 	}
 
 	for(const auto& strip : matrixStrips) {
-		message.push_back((strip->getSize() >> 8) & 0xFF);
-		message.push_back(strip->getSize() & 0xFF);
+		auto matrix = std::dynamic_pointer_cast<LightStripMatrix>(strip);
+
+		message.push_back(matrix->getWidth());
+		message.push_back(matrix->getHeight());
 	}
 
 	message.insert(message.end(), name.begin(), name.end());

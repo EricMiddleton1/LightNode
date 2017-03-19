@@ -14,7 +14,8 @@ public:
 		Digital,
 		Matrix
 	};
-
+	
+	LightStrip();
 	LightStrip(Type type, size_t ledCount);
 
 	Type getType() const;
