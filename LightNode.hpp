@@ -19,8 +19,7 @@ public:
 	~LightNode();
 
 private:
-	static const uint16_t PORT_SEND = 54924;
-	static const uint16_t PORT_RECV = 54923;
+	static const uint16_t PORT = 54923;
 	static const int BUFFER_SIZE = 65535;
 	static const int HEADER = 0xAA55;
 	static const int ALIVE_TIMEOUT = 1000;
@@ -58,10 +57,9 @@ private:
 	//Network stuff
 	boost::asio::io_service ioService;
 	std::unique_ptr<boost::asio::io_service::work> ioWork;
-	boost::asio::ip::udp::socket udpSocket;
 	boost::asio::ip::udp::endpoint clientEndpoint, recvEndpoint;
-	uint16_t sendPort, recvPort;
-
+	boost::asio::ip::udp::socket udpSocket;
+	
 	//Timer stuff
 	boost::asio::deadline_timer aliveTimer, watchdogTimer;
 

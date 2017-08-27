@@ -5,9 +5,9 @@
 LightNode::LightNode(const std::vector<std::shared_ptr<LightStrip>>& _strips,
 	const std::string& _name)
 	:	ioWork(std::make_unique<boost::asio::io_service::work>(ioService))
-	,	udpSocket(ioService)
-	,	clientEndpoint(boost::asio::ip::udp::v4(), PORT_SEND)
-	,	recvEndpoint(boost::asio::ip::udp::v4(), PORT_RECV)
+	,	clientEndpoint(boost::asio::ip::udp::v4(), PORT)
+	,	recvEndpoint(boost::asio::ip::udp::v4(), PORT)
+	,	udpSocket(ioService, recvEndpoint)
 	,	aliveTimer(ioService)
 	,	watchdogTimer(ioService)
 	, asyncThread(std::bind(&LightNode::threadRoutine, this))
@@ -39,11 +39,6 @@ LightNode::LightNode(const std::vector<std::shared_ptr<LightStrip>>& _strips,
 		}
 	}
 
-	udpSocket.open(boost::asio::ip::udp::v4());
-
-	//Bind the socket
-	udpSocket.bind(recvEndpoint);
-
 	startListening();
 }
 
@@ -74,12 +69,7 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 
 		//If the packet header is correct
 		if(readHeader == HEADER) {
-			
-			//Respond to the same address, but different port
-			auto respondEndpoint = recvEndpoint;
-			respondEndpoint.port(PORT_SEND);
-
-			bool inBand = connected && (respondEndpoint == clientEndpoint);
+			bool inBand = connected && (recvEndpoint.address() == clientEndpoint.address());
 
 			if(connected && inBand && (readId != PacketID::PING)) {
 				feedWatchdog();
@@ -89,16 +79,16 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 				case PacketID::PING:
 					if(!inBand) {
 						//We respond with info packet
-						sendInfo(respondEndpoint);
+						sendInfo(recvEndpoint);
 					}
 				break;
 
 				case PacketID::INIT:
 					//We respond with ack packet
 					if(!connected) {
-						sendAck(respondEndpoint);
+						sendAck(recvEndpoint);
 
-						clientEndpoint = respondEndpoint;
+						clientEndpoint = recvEndpoint;
 						connected = true;
 						startAliveTimer();
 						feedWatchdog();
@@ -106,19 +96,22 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 						std::cout << "[Info] Client connected" << std::endl;
 					}
 					else {
-						sendNack(respondEndpoint, readId);
+						sendNack(recvEndpoint, readId);
 					}
 				break;
 
 				case PacketID::UPDATE:
 					if(inBand) {
 						if(!processUpdate(bytesTransferred)) {
-							sendNack(respondEndpoint, readId);
+							sendNack(recvEndpoint, readId);
 						}
 					}
 					else {
-						sendNack(respondEndpoint, readId);
+						sendNack(recvEndpoint, readId);
 					}
+				break;
+
+				case PacketID::ALIVE:
 				break;
 
 				default:
