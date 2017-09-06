@@ -101,7 +101,7 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 				break;
 
 				case PacketID::UPDATE:
-					if(inBand) {
+					if(!connected || inBand) {
 						if(!processUpdate(bytesTransferred)) {
 							sendNack(recvEndpoint, readId);
 						}
