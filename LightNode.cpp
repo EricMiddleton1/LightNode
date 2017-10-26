@@ -1,44 +1,22 @@
 #include "LightNode.hpp"
-#include "LightStripMatrix.hpp"
 
+#include <stdexcept>
+#include <string>
 
-LightNode::LightNode(const std::vector<std::shared_ptr<LightStrip>>& _strips,
+LightNode::LightNode(const std::vector<std::shared_ptr<Light>>& _lights,
 	const std::string& _name)
-	:	ioWork(std::make_unique<boost::asio::io_service::work>(ioService))
-	,	clientEndpoint(boost::asio::ip::udp::v4(), PORT)
-	,	recvEndpoint(boost::asio::ip::udp::v4(), PORT)
-	,	udpSocket(ioService, recvEndpoint)
-	,	aliveTimer(ioService)
-	,	watchdogTimer(ioService)
-	, asyncThread(std::bind(&LightNode::threadRoutine, this))
-	,	name(_name)
-	,	connected(false) {
+	:	ioWork{std::make_unique<boost::asio::io_service::work>(ioService)}
+	,	recvEndpoint{boost::asio::ip::udp::v4(), PORT}
+	,	udpSocket{ioService, recvEndpoint}
+	, asyncThread{[this]() {threadRoutine();}}
+	,	name{_name}
+	,	lights{_lights} {
 	
-	if(_strips.size() == 0) {
-		throw std::runtime_error("LightNode::LightNode: Requires at least 1 LightStrip "
+	if(_lights.size() == 0) {
+		throw std::runtime_error("LightNode::LightNode: Requires at least 1 Light "
 			"(you gave me 0)");
 	}
 	
-	for(auto& strip : _strips) {
-		switch(strip->getType()) {
-			case LightStrip::Type::Analog:
-				analogStrips.push_back(strip);
-			break;
-
-			case LightStrip::Type::Digital:
-				digitalStrips.push_back(strip);
-			break;
-
-			case LightStrip::Type::Matrix:
-				matrixStrips.push_back(strip);
-			break;
-
-			default:
-				throw std::runtime_error("LightNode::LightNode: Invalid LightStrip type");
-			break;
-		}
-	}
-
 	startListening();
 }
 
@@ -52,8 +30,9 @@ LightNode::~LightNode() {
 void LightNode::startListening() {
 	udpSocket.async_receive_from(boost::asio::buffer(readBuf),
 		recvEndpoint,
-		std::bind(&LightNode::handleReceive, this,
-			std::placeholders::_1, std::placeholders::_2));
+		[this](const boost::system::error_code& ec, size_t bytesTransferred) {
+			handleReceive(ec, bytesTransferred);
+		});
 }
 
 void LightNode::handleReceive(const boost::system::error_code& error,
@@ -62,67 +41,72 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 	if(error) {
 		std::cout << "[Error] handleReceive: " << error.message() << std::endl;
 	}
-	else if(bytesTransferred > 2) {
-		//Check for the correct header
-		int readHeader = readBuf[0] << 8 | readBuf[1];
-		PacketID readId = static_cast<PacketID>(readBuf[2]);
-
+	else if(bytesTransferred > 1) {
 		//If the packet header is correct
-		if(readHeader == HEADER) {
-			bool inBand = connected && (recvEndpoint.address() == clientEndpoint.address());
+		if(readBuf[0] == HEADER) {
+			try {
+				Packet p({readBuf.begin()+1, readBuf.end()});
+				uint8_t lightID = p.getLightID();
 
-			if(connected && inBand && (readId != PacketID::PING)) {
-				feedWatchdog();
+				if(lightID >= lights.size()) {
+					std::cerr << "[Error] LightNode::handleReceive: Invalid Light ID: "
+						<< lightID << std::endl;
+				}
+
+				auto& light = *lights[lightID];
+
+				bool update = false;
+
+				if(lightID < lights.size()) {
+					switch(p.getID()) {
+						case Packet::ID::NodeInfo:
+						break;
+
+						case Packet::ID::LightInfo:
+						break;
+
+						case Packet::ID::TurnOn:
+							for(auto& led : light)
+								led.turnOn();
+							update = true;
+						break;
+						
+						case Packet::ID::TurnOff:
+							for(auto& led : light)
+								led.turnOff();
+							update = true;
+						break;
+
+						case Packet::ID::UpdateColor:
+							try {
+								updateColor(lightID, p.data());
+								update = true;
+							}
+							catch(const std::exception& e) {
+								std::cerr << "[Error] LightNode::handleReceive: " << e.what() << std::endl;
+							}
+						break;
+
+						case Packet::ID::ChangeBrightness:
+						break;
+					}
+
+					if(update) {
+						light.update();
+					}
+				}
+				else {
+					std::cerr << "[Error] LightNode::handleReceive: Invalid Light ID: " << (int)lightID
+						<< std::endl;
+				}
 			}
-
-			switch(readId) {
-				case PacketID::PING:
-					if(!inBand) {
-						//We respond with info packet
-						sendInfo(recvEndpoint);
-					}
-				break;
-
-				case PacketID::INIT:
-					//We respond with ack packet
-					if(!connected) {
-						sendAck(recvEndpoint);
-
-						clientEndpoint = recvEndpoint;
-						connected = true;
-						startAliveTimer();
-						feedWatchdog();
-
-						std::cout << "[Info] Client connected" << std::endl;
-					}
-					else {
-						sendNack(recvEndpoint, readId);
-					}
-				break;
-
-				case PacketID::UPDATE:
-					if(!connected || inBand) {
-						if(!processUpdate(bytesTransferred)) {
-							sendNack(recvEndpoint, readId);
-						}
-					}
-					else {
-						sendNack(recvEndpoint, readId);
-					}
-				break;
-
-				case PacketID::ALIVE:
-				break;
-
-				default:
-					std::cout << "[Error] Unimplemented packet id received: "
-						<< static_cast<int>(readId) << std::endl;
-				break;
+			catch(const std::exception& e) {
+				std::cerr << "[Error] LightNode::handleReceive: " << e.what() << std::endl;
 			}
 		}
 		else { //The packet header was not correct
-			std::cout << "[Error] Packet received with incorrect header: "
-				<< (int)readHeader << std::endl;
+			std::cerr << "[Error] Packet received with incorrect header: "
+				<< (int)readBuf[0] << std::endl;
 		}
 	}
 
@@ -133,183 +117,62 @@ void LightNode::threadRoutine() {
 		ioService.run();
 }
 
-void LightNode::cbAliveTimer(const boost::system::error_code& ec) {
-	if(ec) {
-		if(ec.value() == boost::system::errc::operation_canceled) {
-			return;
-		}
-		else {
-			std::cout << "[Error] cbAliveTimer: " << ec.message() << std::endl;
-		}
+void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
+	if(data.size() < 2) {
+		//throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
+			//+ std::to_string(data.size());
 	}
-	else if(!connected) {
-		return;
+	
+	int colorMask = *(data.begin());
+	if(colorMask == 0) {
+		throw std::runtime_error("LightNode::updateColor: NULL color mask");
+	}
+
+	bool useHue = colorMask & 0x4,
+		useSat = colorMask & 0x2,
+		useVal = colorMask & 0x1;
+
+	int stride = useHue + useSat + useVal;
+	if( ((data.size()-1) % stride) != 0 ) {
+		throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
+			+ std::to_string(data.size()));
+	}
+
+	auto& light = *lights[lightID];
+
+	if(data.size() == (1 + stride)) {
+		int i = 1;
+
+		if(useHue) {
+			for(auto& led : light)
+				led.setHue(data[i]);
+			++i;
+		}
+		if(useSat) {
+			for(auto& led : light)
+				led.setSat(data[i]);
+			++i;
+		}
+		if(useVal) {
+			for(auto& led : light)
+				led.setVal(data[i]);
+		}
 	}
 	else {
-		std::vector<unsigned char> message;
-
-		//Push the header
-		message.push_back( (HEADER >> 8) & 0xFF );
-		message.push_back( HEADER & 0xFF );
-
-		//Push the identification
-		message.push_back(static_cast<unsigned char>(PacketID::ALIVE));
-
-		try {
-			udpSocket.send_to(boost::asio::buffer(message), clientEndpoint);
+		if(data.size() > (light.size() + 1)) {
+			throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
+				+ std::to_string(data.size()));
 		}
-		catch(std::exception& e) {
-			std::cerr << "sendAck exception caught: " << e.what() << std::endl;
+		
+		auto ledItr = light.begin();
+
+		for(auto dataItr = data.begin()+1; dataItr < data.end(); ++ledItr) {
+			if(useHue)
+				ledItr->setHue(*(dataItr++));
+			if(useSat)
+				ledItr->setSat(*(dataItr++));
+			if(useVal)
+				ledItr->setVal(*(dataItr++));
 		}
 	}
-
-	startAliveTimer();
-}
-
-void LightNode::cbWatchdogTimer(const boost::system::error_code& ec) {
-	if(ec.value() != boost::system::errc::operation_canceled) {
-		aliveTimer.cancel();
-		connected = false;
-
-		std::cout << "[Info] Client timed out" << std::endl;
-	}
-}
-
-void LightNode::startAliveTimer() {
-	aliveTimer.expires_from_now(boost::posix_time::milliseconds(ALIVE_TIMEOUT));
-	aliveTimer.async_wait(std::bind(&LightNode::cbAliveTimer, this,
-		std::placeholders::_1));
-}
-
-void LightNode::feedWatchdog() {
-	watchdogTimer.cancel();
-	
-	watchdogTimer.expires_from_now(
-		boost::posix_time::milliseconds(WATCHDOG_TIMEOUT));
-	watchdogTimer.async_wait(std::bind(&LightNode::cbWatchdogTimer, this,
-		std::placeholders::_1));
-}
-
-
-void LightNode::sendAck(const boost::asio::ip::udp::endpoint& endpoint) {
-	std::vector<unsigned char> message;
-
-	//Push the header
-	message.push_back( (HEADER >> 8) & 0xFF );
-	message.push_back( HEADER & 0xFF );
-
-	//Push the identification
-	message.push_back(static_cast<unsigned char>(PacketID::ACK));
-
-	try {
-		udpSocket.send_to(boost::asio::buffer(message), endpoint);
-	}
-	catch(std::exception& e) {
-		std::cerr << "sendAck exception caught: " << e.what() << std::endl;
-	}
-}
-
-void LightNode::sendNack(const boost::asio::ip::udp::endpoint& endpoint,
-	LightNode::PacketID id) {
-	std::vector<unsigned char> message;
-
-	//Push the header
-	message.push_back( (HEADER >> 8) & 0xFF );
-	message.push_back( HEADER & 0xFF );
-
-	//Push the identification
-	message.push_back(static_cast<unsigned char>(PacketID::NACK));
-
-	//Push the ID we're NACKing
-	message.push_back(static_cast<unsigned char>(id));
-
-	try {
-		udpSocket.send_to(boost::asio::buffer(message), endpoint);
-	}
-	catch(std::exception& e) {
-		std::cerr << "sendAck exception caught: " << e.what() << std::endl;
-	}
-}
-
-void LightNode::sendInfo(const boost::asio::ip::udp::endpoint& endpoint) {
-	std::vector<unsigned char> message;
-
-	//Push the header
-	message.push_back( (HEADER >> 8) & 0xFF );
-	message.push_back( HEADER & 0xFF );
-
-	//Push the identification
-	message.push_back(static_cast<unsigned char>(PacketID::INFO));
-
-	message.push_back(analogStrips.size());
-	message.push_back(digitalStrips.size());
-	message.push_back(matrixStrips.size());
-
-	for(const auto& strip : digitalStrips) {
-		message.push_back((strip->getSize() >> 8) & 0xFF);
-		message.push_back(strip->getSize() & 0xFF);
-	}
-
-	for(const auto& strip : matrixStrips) {
-		auto matrix = std::dynamic_pointer_cast<LightStripMatrix>(strip);
-
-		message.push_back(matrix->getWidth());
-		message.push_back(matrix->getHeight());
-	}
-
-	message.insert(message.end(), name.begin(), name.end());
-
-
-	try {
-		std::cout << "[Info] LightNode::sendInfo: Sending info to "
-			<< endpoint << std::endl;
-
-		udpSocket.send_to(boost::asio::buffer(message), endpoint);
-	}
-	catch(std::exception& e) {
-		std::cerr << "sendConfigMessage exception caught: " << e.what() << std::endl;
-	}
-}
-
-bool LightNode::processUpdate(int bytesTransferred) {
-	int payloadLength = bytesTransferred - 3;
-	
-	size_t i = 3;
-	
-	//TODO: Validate payload length
-
-	for(auto& strip : analogStrips) {
-		Color c(readBuf[i], readBuf[i+1], readBuf[i+2]);
-		strip->setPixels({c});
-
-		i += 3;
-	}
-
-	for(auto& strip : digitalStrips) {
-		size_t stripSize = strip->getSize();
-		std::vector<Color> colors;
-		colors.reserve(stripSize);
-
-		for(size_t j = 0; j < stripSize; ++j) {
-			colors.push_back({readBuf[i], readBuf[i+1], readBuf[i+2]});
-			i += 3;
-		}
-
-		strip->setPixels(colors);
-	}
-
-	for(auto& strip : matrixStrips) {
-		size_t stripSize = strip->getSize();
-		std::vector<Color> colors;
-		colors.reserve(stripSize);
-
-		for(size_t j = 0; j < stripSize; ++j) {
-			colors.push_back({readBuf[i], readBuf[i+1], readBuf[i+2]});
-			i += 3;
-		}
-
-		strip->setPixels(colors);
-	}
-
-	return true;
 }
