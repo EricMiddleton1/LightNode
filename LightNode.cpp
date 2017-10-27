@@ -176,6 +176,12 @@ void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 			for(auto& led : light)
 				led.setVal(data[i]);
 		}
+
+		for(auto& led : light) {
+			if(!led.isOn()) {
+				led.turnOn();
+			}
+		}
 	}
 	else {
 		if(data.size() != (3*light.size() + 1)) {
@@ -192,6 +198,10 @@ void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 				ledItr->setSat(*(dataItr++));
 			if(useVal)
 				ledItr->setVal(*(dataItr++));
+
+			if(!ledItr->isOn()) {
+				ledItr->turnOn();
+			}
 		}
 	}
 }

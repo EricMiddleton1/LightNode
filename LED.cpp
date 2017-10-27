@@ -13,8 +13,8 @@ bool LED::isOn() const {
 	return on;
 }
 
-Color LED::getRGB() const {
-	return Color::HSV(h, s, v);
+Color LED::getColor() const {
+	return on ? Color::HSV(h, s, v) : Color{};
 }
 
 void LED::turnOn() {
@@ -23,6 +23,18 @@ void LED::turnOn() {
 
 void LED::turnOff() {
 	on = false;
+}
+
+uint8_t LED::getHue() const {
+	return h;
+}
+
+uint8_t LED::getSat() const {
+	return s;
+}
+
+uint8_t LED::getVal() const {
+	return v;
 }
 
 void LED::setHue(uint8_t hue) {
