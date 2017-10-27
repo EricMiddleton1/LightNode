@@ -8,6 +8,7 @@
 #include <functional>
 #include <cstdint>
 #include <iostream>
+#include <deque>
 
 #include "Packet.hpp"
 #include "Light.hpp"
@@ -20,7 +21,7 @@ public:
 	~LightNode();
 
 private:
-	static const uint16_t PORT = 54923;
+	static const uint16_t PORT = 5492;
 	static const int BUFFER_SIZE = 65535;
 	static const uint8_t HEADER = 0xAA;
 
@@ -28,6 +29,9 @@ private:
 
 	void handleReceive(const boost::system::error_code& error,
 		size_t bytesTransferred);
+
+	void sendDatagram(const boost::asio::ip::udp::endpoint& endpoint,
+		const std::vector<uint8_t>& data);
 
 	void threadRoutine();
 
@@ -45,4 +49,6 @@ private:
 	std::vector<std::shared_ptr<Light>> lights;
 
 	std::array<uint8_t, BUFFER_SIZE> readBuf;
+
+	std::deque<std::vector<uint8_t>> sendQueue;
 };

@@ -3,6 +3,20 @@
 #include <stdexcept>
 #include <string>
 
+std::string toString(const std::vector<uint8_t>& data) {
+	std::string str("{");
+
+	if(!data.empty()) {
+		for(int i = 0; i < (data.size() - 1); ++i) {
+			str += std::to_string(static_cast<int>(data[i])) + ", ";
+		}
+		str += std::to_string(static_cast<int>(data[data.size()-1]));
+	}
+	str += "}";
+
+	return str;
+}
+
 LightNode::LightNode(const std::vector<std::shared_ptr<Light>>& _lights,
 	const std::string& _name)
 	:	ioWork{std::make_unique<boost::asio::io_service::work>(ioService)}
@@ -42,75 +56,80 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 		std::cout << "[Error] handleReceive: " << error.message() << std::endl;
 	}
 	else if(bytesTransferred > 1) {
-		//If the packet header is correct
-		if(readBuf[0] == HEADER) {
-			try {
-				Packet p({readBuf.begin()+1, readBuf.end()});
-				uint8_t lightID = p.getLightID();
+		try {
+			Packet p({readBuf.begin(), readBuf.begin() + bytesTransferred});
+			uint8_t lightID = p.getLightID();
 
-				if(lightID >= lights.size()) {
-					std::cerr << "[Error] LightNode::handleReceive: Invalid Light ID: "
-						<< lightID << std::endl;
-				}
-
+			if(lightID >= lights.size()) {
+				std::cerr << "[Error] LightNode::handleReceive: Invalid Light ID: "
+					<< static_cast<int>(lightID) << std::endl;
+			}
+			else {
 				auto& light = *lights[lightID];
-
 				bool update = false;
 
-				if(lightID < lights.size()) {
-					switch(p.getID()) {
-						case Packet::ID::NodeInfo:
-						break;
+				switch(p.getID()) {
+					case Packet::ID::NodeInfo:
+						sendDatagram(recvEndpoint,
+							Packet::NodeInfoResponse(lights.size(), name).asDatagram());
+					break;
 
-						case Packet::ID::LightInfo:
-						break;
+					case Packet::ID::LightInfo:
+						sendDatagram(recvEndpoint,
+							Packet::LightInfoResponse(lightID, light.size(), light.getName()).asDatagram());
+					break;
 
-						case Packet::ID::TurnOn:
-							for(auto& led : light)
-								led.turnOn();
+					case Packet::ID::TurnOn:
+						for(auto& led : light)
+							led.turnOn();
+						update = true;
+					break;
+					
+					case Packet::ID::TurnOff:
+						for(auto& led : light)
+							led.turnOff();
+						update = true;
+					break;
+
+					case Packet::ID::UpdateColor:
+						try {
+							updateColor(lightID, p.data());
 							update = true;
-						break;
-						
-						case Packet::ID::TurnOff:
-							for(auto& led : light)
-								led.turnOff();
-							update = true;
-						break;
+						}
+						catch(const std::exception& e) {
+							std::cerr << "[Error] LightNode::handleReceive: " << e.what() << std::endl;
+						}
+					break;
 
-						case Packet::ID::UpdateColor:
-							try {
-								updateColor(lightID, p.data());
-								update = true;
-							}
-							catch(const std::exception& e) {
-								std::cerr << "[Error] LightNode::handleReceive: " << e.what() << std::endl;
-							}
-						break;
-
-						case Packet::ID::ChangeBrightness:
-						break;
-					}
-
-					if(update) {
-						light.update();
-					}
+					case Packet::ID::ChangeBrightness:
+					break;
 				}
-				else {
-					std::cerr << "[Error] LightNode::handleReceive: Invalid Light ID: " << (int)lightID
-						<< std::endl;
+
+				if(update) {
+					light.update();
 				}
-			}
-			catch(const std::exception& e) {
-				std::cerr << "[Error] LightNode::handleReceive: " << e.what() << std::endl;
 			}
 		}
-		else { //The packet header was not correct
-			std::cerr << "[Error] Packet received with incorrect header: "
-				<< (int)readBuf[0] << std::endl;
+		catch(const std::exception& e) {
+			std::cerr << "[Error] LightNode::handleReceive: " << e.what() << std::endl;
 		}
 	}
-
 	startListening();
+}
+
+void LightNode::sendDatagram(const boost::asio::ip::udp::endpoint& endpoint,
+	const std::vector<uint8_t>& data) {
+	
+	sendQueue.push_back(data);
+
+	udpSocket.async_send_to(boost::asio::buffer(sendQueue.back()), endpoint,
+		[this](const boost::system::error_code& ec, size_t bytesTransferred) {
+			sendQueue.pop_front();
+
+			if(ec) {
+				std::cerr << "[Error] LightNode::cbSendDatagram: " << ec.message() << std::endl;
+			}
+		});
 }
 
 void LightNode::threadRoutine() {
@@ -119,8 +138,8 @@ void LightNode::threadRoutine() {
 
 void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 	if(data.size() < 2) {
-		//throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
-			//+ std::to_string(data.size());
+		throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
+			+ std::to_string(data.size()));
 	}
 	
 	int colorMask = *(data.begin());
@@ -135,7 +154,7 @@ void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 	int stride = useHue + useSat + useVal;
 	if( ((data.size()-1) % stride) != 0 ) {
 		throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
-			+ std::to_string(data.size()));
+			+ std::to_string(data.size()) + ", stride=" + std::to_string(stride));
 	}
 
 	auto& light = *lights[lightID];
@@ -159,7 +178,7 @@ void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 		}
 	}
 	else {
-		if(data.size() > (light.size() + 1)) {
+		if(data.size() != (3*light.size() + 1)) {
 			throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
 				+ std::to_string(data.size()));
 		}

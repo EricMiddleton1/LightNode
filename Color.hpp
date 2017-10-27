@@ -1,44 +1,42 @@
 #pragma once
 
-#include <cmath>
-#include <algorithm>
 #include <string>
-
-typedef unsigned char byte;
+#include <cstdint>
 
 class Color {
 public:
 	Color();
-	Color(int r, int g, int b);
+	Color(uint8_t r, uint8_t g, uint8_t b);
 
 	Color operator=(const Color& c);
 	bool operator!=(const Color& rhs) const;
 	bool operator==(const Color& rhs) const;
+	Color operator*(double rhs) const;
 
 	std::string toString() const;
 
-	byte getRed() const;
-	byte getGreen() const;
-	byte getBlue() const;
+	uint8_t getRed() const;
+	uint8_t getGreen() const;
+	uint8_t getBlue() const;
 
-	void setRed(byte red);
-	void setGreen(byte green);
-	void setBlue(byte blue);
+	void setRed(uint8_t red);
+	void setGreen(uint8_t green);
+	void setBlue(uint8_t blue);
 
-	float getHue() const;
-	float getHSLSaturation() const;
-	float getLightness() const;
-
-	float getHSVSaturation() const;
-	float getValue() const;
+	uint8_t getHue() const;
+	uint8_t getSat() const;
+	uint8_t getVal() const;
 
 	Color filter(const Color&, double);
 
-	void print() const;
+	void gammaCorrect(double gamma);
 
-	static Color HSL(float hue, float saturation, float lightness);
-	static Color HSV(float hue, float saturation, float value);
+	static Color HSV(uint8_t hue, uint8_t sat, uint8_t val);
 
 private:
-	int r, g, b;
+	float getHueF() const;
+	float getSatF() const;
+	float getValF() const;
+
+	uint8_t r, g, b;
 };
