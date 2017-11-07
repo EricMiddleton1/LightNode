@@ -1,8 +1,13 @@
 #pragma once
 
+#include <mutex>
 #include <cstdint>
+#include <boost/asio.hpp>
 
+#include "PeriodicTimer.hpp"
 #include "Color.hpp"
+
+class Light;
 
 class LED {
 public:
@@ -23,6 +28,12 @@ public:
 	void setVal(uint8_t val);
 
 private:
-	uint8_t h, s, v;
+	friend class Light;
+
+	void updateColorFilter();
+	static void filter(uint8_t& out, uint8_t target, uint8_t inc);
+
+	mutable std::mutex colorMutex;
+	uint8_t h, s, v, targetH, targetS, targetV;
 	bool on;
 };
