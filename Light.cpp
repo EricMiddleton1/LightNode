@@ -6,11 +6,8 @@
 using namespace std;
 using namespace chrono_literals;
 
-Light::Light(boost::asio::io_service& ioService, const string& _name, int _ledCount)
-	:	timer{ioService, 10ms, [this]{for(auto& led : leds) {
-			led.updateColorFilter();
-		}}}
-	,	name{_name}
+Light::Light(const string& _name, int _ledCount)
+	:	name{_name}
 	,	leds(_ledCount)	{
 }
 
