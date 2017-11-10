@@ -4,7 +4,7 @@
 LED::LED()
 	:	h{0}
 	,	s{0}
-	,	v{255}
+	,	v{127}
 	,	on{false} {
 
 }
@@ -19,6 +19,10 @@ Color LED::getColor() const {
 
 void LED::turnOn() {
 	on = true;
+
+	if(v == 0) {
+		v = 32;
+	}
 }
 
 void LED::turnOff() {

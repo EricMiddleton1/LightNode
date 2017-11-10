@@ -101,7 +101,21 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 						}
 					break;
 
-					case Packet::ID::ChangeBrightness:
+					case Packet::ID::ChangeBrightness: {
+						int brightness = static_cast<int>(light.begin()[0].getVal()); 
+						int delta = 255*static_cast<int>(static_cast<int8_t>(p.data()[0])) / 100;
+						brightness = std::min(255, std::max(0, brightness + delta));
+
+						for(auto& led : light) {
+							led.turnOn();
+							led.setVal(brightness);
+						}
+
+						update = true;
+					}
+					break;
+
+
 					break;
 				}
 
