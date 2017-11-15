@@ -1,54 +1,70 @@
 #include "LED.hpp"
 
+#include <iostream>
 
 LED::LED()
-	:	h{0}
-	,	s{0}
-	,	v{127}
-	,	on{false} {
+	:	start{0, 0, 127, false}
+	,	cur{start}
+	,	target{start} {
 
 }
 
-bool LED::isOn() const {
-	return on;
+bool LED::isTargetOn() const {
+	return target.on;
 }
 
 Color LED::getColor() const {
-	return on ? Color::HSV(h, s, v) : Color{};
+	return Color::HSV(cur.h, cur.s, cur.v);
 }
 
 void LED::turnOn() {
-	on = true;
-
-	if(v == 0) {
-		v = 32;
-	}
+	target.on = true;
 }
 
 void LED::turnOff() {
-	on = false;
+	target.on = false;
 }
 
-uint8_t LED::getHue() const {
-	return h;
+uint8_t LED::getTargetHue() const {
+	return target.h;
 }
 
-uint8_t LED::getSat() const {
-	return s;
+uint8_t LED::getTargetSat() const {
+	return target.s;
 }
 
-uint8_t LED::getVal() const {
-	return v;
+uint8_t LED::getTargetVal() const {
+	return target.v;
 }
 
-void LED::setHue(uint8_t hue) {
-	h = hue;
+void LED::setTargetHue(uint8_t hue) {
+	target.h = hue;
 }
 
-void LED::setSat(uint8_t sat) {
-	s = sat;
+void LED::setTargetSat(uint8_t sat) {
+	target.s = sat;
 }
 
-void LED::setVal(uint8_t val) {
-	v = val;
+void LED::setTargetVal(uint8_t val) {
+	if(val == 0) {
+		target.on = false;
+	}
+	else {
+		target.v = val;
+		target.on = true;
+	}
+}
+
+void LED::startTransition() {
+	start = cur;
+}
+
+void LED::update(float t) {
+	cur.h = filter(start.h, target.h, t);
+	cur.s = filter(start.s, target.s, t);
+	cur.v = filter(start.v, (target.on) ? target.v : 0, t);
+}
+
+uint8_t LED::filter(uint8_t start, uint8_t end, float t) {
+	return start + (static_cast<int>(end) - start) * t;
 }

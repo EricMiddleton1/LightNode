@@ -66,6 +66,7 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 			}
 			else {
 				auto& light = *lights[lightID];
+				auto data = p.data();
 				bool update = false;
 
 				switch(p.getID()) {
@@ -76,7 +77,8 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 
 					case Packet::ID::LightInfo:
 						sendDatagram(recvEndpoint,
-							Packet::LightInfoResponse(lightID, light.size(), light.getName()).asDatagram());
+							Packet::LightInfoResponse(lightID, light.size(),
+								light.getName()).asDatagram());
 					break;
 
 					case Packet::ID::TurnOn:
@@ -93,7 +95,7 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 
 					case Packet::ID::UpdateColor:
 						try {
-							updateColor(lightID, p.data());
+							updateColor(lightID, data);
 							update = true;
 						}
 						catch(const std::exception& e) {
@@ -102,13 +104,12 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 					break;
 
 					case Packet::ID::ChangeBrightness: {
-						int brightness = static_cast<int>(light.begin()[0].getVal()); 
+						int brightness = static_cast<int>(light.begin()[0].getTargetVal()); 
 						int delta = 255*static_cast<int>(static_cast<int8_t>(p.data()[0])) / 100;
 						brightness = std::min(255, std::max(0, brightness + delta));
 
 						for(auto& led : light) {
-							led.turnOn();
-							led.setVal(brightness);
+							led.setTargetVal(brightness);
 						}
 
 						update = true;
@@ -120,7 +121,17 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 				}
 
 				if(update) {
-					light.update();
+					if(data.size() < 1) {
+						std::cerr << "[Error] LightNode::handleReceive: Invalid data size "
+							"for light update" << std::endl;
+					}
+					else {
+						uint8_t transitionPeriod = data[0] & 0x7F;
+						bool gammaCorrect = data[0] & 0x80;
+
+						light.setGammaCorrect(gammaCorrect);
+						light.startTransition(10*transitionPeriod);
+					}
 				}
 			}
 		}
@@ -151,12 +162,12 @@ void LightNode::threadRoutine() {
 }
 
 void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
-	if(data.size() < 2) {
+	if(data.size() < 3) {
 		throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
 			+ std::to_string(data.size()));
 	}
 	
-	int colorMask = *(data.begin());
+	int colorMask = data[1];
 	if(colorMask == 0) {
 		throw std::runtime_error("LightNode::updateColor: NULL color mask");
 	}
@@ -166,56 +177,47 @@ void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 		useVal = colorMask & 0x1;
 
 	int stride = useHue + useSat + useVal;
-	if( ((data.size()-1) % stride) != 0 ) {
+	if( ((data.size()-2) % stride) != 0 ) {
 		throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
 			+ std::to_string(data.size()) + ", stride=" + std::to_string(stride));
 	}
 
 	auto& light = *lights[lightID];
 
-	if(data.size() == (1 + stride)) {
-		int i = 1;
+	if(data.size() == (2 + stride)) {
+		int i = 2;
 
 		if(useHue) {
 			for(auto& led : light)
-				led.setHue(data[i]);
+				led.setTargetHue(data[i]);
 			++i;
 		}
 		if(useSat) {
 			for(auto& led : light)
-				led.setSat(data[i]);
+				led.setTargetSat(data[i]);
 			++i;
 		}
 		if(useVal) {
 			for(auto& led : light)
-				led.setVal(data[i]);
+				led.setTargetVal(data[i]);
 		}
 
-		for(auto& led : light) {
-			if(!led.isOn()) {
-				led.turnOn();
-			}
-		}
 	}
 	else {
-		if(data.size() != (3*light.size() + 1)) {
+		if(data.size() != (3*light.size() + 2)) {
 			throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
 				+ std::to_string(data.size()));
 		}
 		
 		auto ledItr = light.begin();
 
-		for(auto dataItr = data.begin()+1; dataItr < data.end(); ++ledItr) {
+		for(auto dataItr = data.begin()+2; dataItr < data.end(); ++ledItr) {
 			if(useHue)
-				ledItr->setHue(*(dataItr++));
+				ledItr->setTargetHue(*(dataItr++));
 			if(useSat)
-				ledItr->setSat(*(dataItr++));
+				ledItr->setTargetSat(*(dataItr++));
 			if(useVal)
-				ledItr->setVal(*(dataItr++));
-
-			if(!ledItr->isOn()) {
-				ledItr->turnOn();
-			}
+				ledItr->setTargetVal(*(dataItr++));
 		}
 	}
 }
