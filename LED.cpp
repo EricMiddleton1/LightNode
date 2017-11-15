@@ -4,8 +4,8 @@
 
 LED::LED()
 	:	start{0, 0, 127, false}
-	,	cur{start}
-	,	target{start} {
+	,	cur(start)
+	,	target(start) {
 
 }
 
