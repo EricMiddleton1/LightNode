@@ -235,7 +235,7 @@ void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 		
 		auto ledItr = light.begin();
 
-		for(auto dataItr = data.begin()+2; dataItr < data.end(); ++ledItr) {
+		for(auto dataItr = data.begin()+1+count; dataItr < data.end(); ++ledItr) {
 			if(useHue)
 				ledItr->setTargetHue(*(dataItr++));
 			if(useSat)
