@@ -24,7 +24,7 @@ public:
 
 	void startTransition();
 
-	void update(float t);
+	void update(float hTime, float sTime, float vTime);
 
 private:
 	struct State {
@@ -32,7 +32,7 @@ private:
 		bool on;
 	};
 
-	static uint8_t filter(uint8_t start, uint8_t end, float t);
+	static uint8_t filter(uint8_t start, uint8_t end, float t, bool wrap = false);
 	
 	State start, cur, target;
 };

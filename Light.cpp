@@ -3,33 +3,34 @@
 #include <stdexcept>
 #include <string>
 #include <iostream>
+#include <numeric>
 
 using namespace std;
 using namespace std::literals::chrono_literals;
 
 Light::Light(boost::asio::io_service& _ioService, const string& _name, int _ledCount)
 	: transitionTimer{_ioService, 1ms, [this]() {
-			float t;
+			float hTime, sTime, vTime;
 
-			if(transitionPeriod == 0) {
-				t = 1.f;
-			}
-			else {
-				tick = std::min(transitionPeriod, tick + 1);
-				t = static_cast<float>(tick) / transitionPeriod;
-			}
+			hTime = (huePeriod == 0) ? 1.f : min(1.f, static_cast<float>(tick) / huePeriod);
+			sTime = (satPeriod == 0) ? 1.f : min(1.f, static_cast<float>(tick) / satPeriod);
+			vTime = (valPeriod == 0) ? 1.f : min(1.f, static_cast<float>(tick) / valPeriod);
+
+			tick = std::min(std::max({huePeriod, satPeriod, valPeriod}), tick + 1);
 
 			for(auto& led : leds) {
-				led.update(t);
+				led.update(hTime, sTime, vTime);
 			}
 			
 			update();
 
-			if(tick == transitionPeriod) {
+			if(std::min({hTime, sTime, vTime}) >= 1.f) {
 				transitionTimer.stop();
 			}
 		}}
-	,	transitionPeriod{0}
+	,	huePeriod{0}
+	,	satPeriod{0}
+	,	valPeriod{0}
 	,	tick{0}
 	,	name{_name}
 	,	leds(_ledCount) {
@@ -65,12 +66,23 @@ void Light::setGammaCorrect(bool _gammaCorrect) {
 	gammaCorrect = _gammaCorrect;
 }
 
-void Light::startTransition(unsigned int _transitionPeriod) {
+void Light::setHuePeriod(unsigned int period) {
+	huePeriod = period;
+}
+
+void Light::setSatPeriod(unsigned int period) {
+	satPeriod = period;
+}
+
+void Light::setValPeriod(unsigned int period) {
+	valPeriod = period;
+}
+
+void Light::startTransition() {
 	for(auto& led : leds) {
 		led.startTransition();
 	}
 
-	transitionPeriod = _transitionPeriod;
 	tick = 0;
 
 	transitionTimer.start();

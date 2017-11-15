@@ -82,15 +82,27 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 					break;
 
 					case Packet::ID::TurnOn:
-						for(auto& led : light)
-							led.turnOn();
-						update = true;
+						if(data.size() == 1) {
+							for(auto& led : light)
+								led.turnOn();
+							update = true;
+							light.setValPeriod(10*data[0]);
+						}
+						else {
+							std::cerr << "[Error] Invalid packet length for TurnOn" << std::endl;
+						}
 					break;
 					
 					case Packet::ID::TurnOff:
-						for(auto& led : light)
-							led.turnOff();
-						update = true;
+						if(data.size() == 1) {
+							for(auto& led : light)
+								led.turnOff();
+							update = true;
+							light.setValPeriod(10*data[0]);
+						}
+						else {
+							std::cerr << "[Error] Invalid packet length for TurnOff" << std::endl;
+						}
 					break;
 
 					case Packet::ID::UpdateColor:
@@ -104,15 +116,22 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 					break;
 
 					case Packet::ID::ChangeBrightness: {
-						int brightness = static_cast<int>(light.begin()[0].getTargetVal()); 
-						int delta = 255*static_cast<int>(static_cast<int8_t>(p.data()[0])) / 100;
-						brightness = std::min(255, std::max(0, brightness + delta));
+						if(data.size() == 2) {
+							int brightness = static_cast<int>(light.begin()[0].getTargetVal()); 
+							int delta = 255*static_cast<int>(static_cast<int8_t>(p.data()[1])) / 100;
+							brightness = std::min(255, std::max(0, brightness + delta));
 
-						for(auto& led : light) {
-							led.setTargetVal(brightness);
+							for(auto& led : light) {
+								led.setTargetVal(brightness);
+							}
+
+							update = true;
+							light.setValPeriod(10*data[0]);
 						}
-
-						update = true;
+						else {
+							std::cerr << "[Error] Invalid packet length for ChangeBrightness"
+								<< std::endl;
+						}
 					}
 					break;
 
@@ -126,11 +145,7 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 							"for light update" << std::endl;
 					}
 					else {
-						uint8_t transitionPeriod = data[0] & 0x7F;
-						bool gammaCorrect = data[0] & 0x80;
-
-						light.setGammaCorrect(gammaCorrect);
-						light.startTransition(10*transitionPeriod);
+						light.startTransition();
 					}
 				}
 			}
@@ -167,7 +182,7 @@ void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 			+ std::to_string(data.size()));
 	}
 	
-	int colorMask = data[1];
+	int colorMask = data[0];
 	if(colorMask == 0) {
 		throw std::runtime_error("LightNode::updateColor: NULL color mask");
 	}
@@ -175,17 +190,26 @@ void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 	bool useHue = colorMask & 0x4,
 		useSat = colorMask & 0x2,
 		useVal = colorMask & 0x1;
+	
+	int count = useHue + useSat + useVal;
 
 	int stride = useHue + useSat + useVal;
-	if( ((data.size()-2) % stride) != 0 ) {
+	if( ((data.size()-count-1) % stride) != 0 ) {
 		throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
 			+ std::to_string(data.size()) + ", stride=" + std::to_string(stride));
 	}
 
 	auto& light = *lights[lightID];
 
-	if(data.size() == (2 + stride)) {
-		int i = 2;
+	if(useHue)
+		light.setHuePeriod(10*data[1]);
+	if(useSat)
+		light.setSatPeriod(10*data[1 + useHue]);
+	if(useVal)
+		light.setValPeriod(10*data[1 + useHue + useSat]);
+
+	if(data.size() == (1 + count + stride)) {
+		int i = 1 + count;
 
 		if(useHue) {
 			for(auto& led : light)
@@ -204,7 +228,7 @@ void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 
 	}
 	else {
-		if(data.size() != (3*light.size() + 2)) {
+		if(data.size() != (3*light.size() + 1 + count)) {
 			throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
 				+ std::to_string(data.size()));
 		}

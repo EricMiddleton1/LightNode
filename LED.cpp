@@ -59,12 +59,21 @@ void LED::startTransition() {
 	start = cur;
 }
 
-void LED::update(float t) {
-	cur.h = filter(start.h, target.h, t);
-	cur.s = filter(start.s, target.s, t);
-	cur.v = filter(start.v, (target.on) ? target.v : 0, t);
+void LED::update(float hTime, float sTime, float vTime) {
+	cur.h = filter(start.h, target.h, hTime, true);
+	cur.s = filter(start.s, target.s, sTime);
+	cur.v = filter(start.v, (target.on) ? target.v : 0, vTime);
 }
 
-uint8_t LED::filter(uint8_t start, uint8_t end, float t) {
-	return start + (static_cast<int>(end) - start) * t;
+uint8_t LED::filter(uint8_t start, uint8_t end, float t, bool wrap) {
+	int slope = static_cast<int>(end) - start;
+
+	if(wrap && std::abs(slope) > 127) {
+		auto sign = slope > 0 ? 1 : -1;
+
+		slope = (slope - sign*256);
+	}
+
+	int result = start + slope*t;
+	return result;
 }

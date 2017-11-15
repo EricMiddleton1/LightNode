@@ -23,12 +23,16 @@ public:
 	
 	void setGammaCorrect(bool);
 
-	void startTransition(unsigned int transitionPeriod);
+	void setHuePeriod(unsigned int period);
+	void setSatPeriod(unsigned int period);
+	void setValPeriod(unsigned int period);
+
+	void startTransition();
 
 	virtual void update() = 0;
 protected:
 	PeriodicTimer transitionTimer;
-	unsigned int transitionPeriod, tick;
+	unsigned int huePeriod, satPeriod, valPeriod, tick;
 	
 	std::string name;
 	std::vector<LED> leds;
