@@ -105,6 +105,12 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 						}
 					break;
 
+					case Packet::ID::SetBrightness:
+					break;
+
+					case Packet::ID::SetColor:
+					break;
+
 					case Packet::ID::UpdateColor:
 						try {
 							updateColor(lightID, data);
@@ -177,71 +183,25 @@ void LightNode::threadRoutine() {
 }
 
 void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
-	if(data.size() < 3) {
+	auto& light = *lights[lightID];
+
+	if(data.size() != (3 + 3*light.size())) {
 		throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
 			+ std::to_string(data.size()));
 	}
 	
-	int colorMask = data[0];
-	if(colorMask == 0) {
-		throw std::runtime_error("LightNode::updateColor: NULL color mask");
-	}
 
-	bool useHue = colorMask & 0x4,
-		useSat = colorMask & 0x2,
-		useVal = colorMask & 0x1;
-	
-	int count = useHue + useSat + useVal;
+	light.setHuePeriod(10*data[0]);
+	light.setSatPeriod(10*data[1]);
+	light.setValPeriod(10*data[2]);
 
-	int stride = useHue + useSat + useVal;
-	if( ((data.size()-count-1) % stride) != 0 ) {
-		throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
-			+ std::to_string(data.size()) + ", stride=" + std::to_string(stride));
-	}
+	for(int i = 0; i < light.size(); ++i) {
+		int index = 3 + 3*i;
 
-	auto& light = *lights[lightID];
+		auto led = light.begin() + i;
 
-	if(useHue)
-		light.setHuePeriod(10*data[1]);
-	if(useSat)
-		light.setSatPeriod(10*data[1 + useHue]);
-	if(useVal)
-		light.setValPeriod(10*data[1 + useHue + useSat]);
-
-	if(data.size() == (1 + count + stride)) {
-		int i = 1 + count;
-
-		if(useHue) {
-			for(auto& led : light)
-				led.setTargetHue(data[i]);
-			++i;
-		}
-		if(useSat) {
-			for(auto& led : light)
-				led.setTargetSat(data[i]);
-			++i;
-		}
-		if(useVal) {
-			for(auto& led : light)
-				led.setTargetVal(data[i]);
-		}
-
-	}
-	else {
-		if(data.size() != (3*light.size() + 1 + count)) {
-			throw std::runtime_error(std::string("LightNode::updateColor: invalid size: ")
-				+ std::to_string(data.size()));
-		}
-		
-		auto ledItr = light.begin();
-
-		for(auto dataItr = data.begin()+1+count; dataItr < data.end(); ++ledItr) {
-			if(useHue)
-				ledItr->setTargetHue(*(dataItr++));
-			if(useSat)
-				ledItr->setTargetSat(*(dataItr++));
-			if(useVal)
-				ledItr->setTargetVal(*(dataItr++));
-		}
+		led->setTargetHue(data[index]);
+		led->setTargetSat(data[index+1]);
+		led->setTargetVal(data[index+2]);
 	}
 }
