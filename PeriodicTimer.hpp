@@ -14,6 +14,11 @@ public:
 		const std::chrono::microseconds& period, const TimerHandler& handler);
 	~PeriodicTimer();
 
+	void start();
+	void stop();
+
+	bool isRunning() const;
+
 private:
 	void cbTimer(const boost::system::error_code& error);
 	void resetTimer();

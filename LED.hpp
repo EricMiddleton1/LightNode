@@ -13,21 +13,31 @@ class LED {
 public:
 	LED();
 
-	bool isOn() const;
+	bool isTargetOn() const;
 	Color getColor() const;
 
 	void turnOn();
 	void turnOff();
 	
-	uint8_t getHue() const;
-	uint8_t getSat() const;
-	uint8_t getVal() const;
+	uint8_t getTargetHue() const;
+	uint8_t getTargetSat() const;
+	uint8_t getTargetVal() const;
 
-	void setHue(uint8_t hue);
-	void setSat(uint8_t sat);
-	void setVal(uint8_t val);
+	void setTargetHue(uint8_t hue);
+	void setTargetSat(uint8_t sat);
+	void setTargetVal(uint8_t val);
+
+	void startTransition();
+
+	void update(float hTime, float sTime, float vTime);
 
 private:
-	uint8_t h, s, v;
-	bool on;
+	struct State {
+		uint8_t h, s, v;
+		bool on;
+	};
+
+	static uint8_t filter(uint8_t start, uint8_t end, float t, bool wrap = false);
+	
+	State start, cur, target;
 };
