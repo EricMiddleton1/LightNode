@@ -38,6 +38,9 @@ Light::Light(boost::asio::io_service& _ioService, const string& _name, int _ledC
 	transitionTimer.start();
 }
 
+Light::~Light() {
+}
+
 string Light::getName() const {
 	return name;
 }
@@ -46,20 +49,20 @@ int Light::size() const {
 	return leds.size();
 }
 
-vector<LED>::iterator Light::begin() {
-	return leds.begin();
+LED& Light::operator[](int index) {
+	if( (index < 0) || (index >= leds.size()) ) {
+		throw std::invalid_argument("Light::operator[]: Invalid index");
+	}
+
+	return leds[ledMap(index)];
 }
 
-vector<LED>::const_iterator Light::begin() const {
-	return leds.begin();
-}
+const LED& Light::operator[](int index) const {
+	if( (index < 0) || (index >= leds.size()) ) {
+		throw std::invalid_argument("Light::operator[]: Invalid index");
+	}
 
-vector<LED>::iterator Light::end() {
-	return leds.end();
-}
-
-vector<LED>::const_iterator Light::end() const {
-	return leds.end();
+	return leds[ledMap(index)];
 }
 
 void Light::setGammaCorrect(bool _gammaCorrect) {
@@ -86,4 +89,8 @@ void Light::startTransition() {
 	tick = 0;
 
 	transitionTimer.start();
+}
+
+int Light::ledMap(int index) const {
+	return index;
 }

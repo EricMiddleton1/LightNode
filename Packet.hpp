@@ -30,7 +30,10 @@ public:
 	static Packet NodeInfo();
 	static Packet NodeInfoResponse(uint8_t lightCount, const std::string& name);
 	static Packet LightInfo(uint8_t lightID);
-	static Packet LightInfoResponse(uint8_t lightID, uint16_t ledCount, const std::string& name);
+	static Packet LightInfoResponse(uint8_t lightID, uint16_t ledCount,
+		const std::string& name);
+	static Packet LightInfoResponse(uint8_t lightID, uint8_t width, uint8_t height,
+		const std::string& name);
 	static Packet UpdateColor(uint8_t lightID, const std::vector<Color>& leds);
 
 	ID getID() const;

@@ -45,11 +45,25 @@ Packet Packet::LightInfo(uint8_t lightID) {
 	return {ID::LightInfo, lightID};
 }
 
-Packet Packet::LightInfoResponse(uint8_t lightID, uint16_t ledCount, const std::string& name) {
+Packet Packet::LightInfoResponse(uint8_t lightID, uint16_t ledCount,
+	const std::string& name) {
 	Packet p{ID::LightInfoResponse, lightID};
 	
+	p.payload.push_back(0); //'Linear' type
 	auto countVec = pack16(ledCount);
 	std::copy(countVec.begin(), countVec.end(), std::back_inserter(p.payload));
+	std::copy(name.begin(), name.end(), std::back_inserter(p.payload));
+
+	return p;
+}
+
+Packet Packet::LightInfoResponse(uint8_t lightID, uint8_t width, uint8_t height,
+	const std::string& name) {
+	Packet p{ID::LightInfoResponse, lightID};
+	
+	p.payload.push_back(1); //'Matrix' type
+	p.payload.push_back(width);
+	p.payload.push_back(height);
 	std::copy(name.begin(), name.end(), std::back_inserter(p.payload));
 
 	return p;

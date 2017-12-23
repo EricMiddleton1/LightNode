@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "Matrix.hpp"
+
 std::string toString(const std::vector<uint8_t>& data) {
 	std::string str("{");
 
@@ -75,16 +77,26 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 							Packet::NodeInfoResponse(lights.size(), name).asDatagram());
 					break;
 
-					case Packet::ID::LightInfo:
-						sendDatagram(recvEndpoint,
-							Packet::LightInfoResponse(lightID, light.size(),
-								light.getName()).asDatagram());
+					case Packet::ID::LightInfo: {
+						auto* matrix = dynamic_cast<Matrix*>(&light);
+						if(matrix == nullptr) {
+							sendDatagram(recvEndpoint,
+								Packet::LightInfoResponse(lightID, light.size(),
+									light.getName()).asDatagram());
+						}
+						else {
+							sendDatagram(recvEndpoint,
+								Packet::LightInfoResponse(lightID, matrix->getWidth(),
+									matrix->getHeight(), light.getName()).asDatagram());
+						}
+					}
 					break;
 
 					case Packet::ID::TurnOn:
 						if(data.size() == 1) {
-							for(auto& led : light)
-								led.turnOn();
+							for(int i = 0; i < light.size(); ++i) {
+								light[i].turnOn();
+							}
 							update = true;
 							light.setValPeriod(10*data[0]);
 						}
@@ -95,8 +107,9 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 					
 					case Packet::ID::TurnOff:
 						if(data.size() == 1) {
-							for(auto& led : light)
-								led.turnOff();
+							for(int i = 0; i < light.size(); ++i) {
+								light[i].turnOff();
+							}
 							update = true;
 							light.setValPeriod(10*data[0]);
 						}
@@ -123,12 +136,12 @@ void LightNode::handleReceive(const boost::system::error_code& error,
 
 					case Packet::ID::ChangeBrightness: {
 						if(data.size() == 2) {
-							int brightness = static_cast<int>(light.begin()[0].getTargetVal()); 
+							int brightness = static_cast<int>(light[0].getTargetVal()); 
 							int delta = 255*static_cast<int>(static_cast<int8_t>(p.data()[1])) / 100;
 							brightness = std::min(255, std::max(0, brightness + delta));
 
-							for(auto& led : light) {
-								led.setTargetVal(brightness);
+							for(int i = 0; i < light.size(); ++i) {
+								light[i].setTargetVal(brightness);
 							}
 
 							update = true;
@@ -198,10 +211,10 @@ void LightNode::updateColor(uint8_t lightID, const std::vector<uint8_t>& data) {
 	for(int i = 0; i < light.size(); ++i) {
 		int index = 3 + 3*i;
 
-		auto led = light.begin() + i;
+		auto& led = light[i];
 
-		led->setTargetHue(data[index]);
-		led->setTargetSat(data[index+1]);
-		led->setTargetVal(data[index+2]);
+		led.setTargetHue(data[index]);
+		led.setTargetSat(data[index+1]);
+		led.setTargetVal(data[index+2]);
 	}
 }
